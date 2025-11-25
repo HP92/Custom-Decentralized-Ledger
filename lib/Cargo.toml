@@ -4,3 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+chrono = { version = "0.4.42", features = ["serde"] }
+ciborium = { version = "0.2.2" }
+ecdsa = { version = "0.16.9", features = ["signing", "verifying", "serde", "pem"] }
+hex = { version = "0.4.3" }
+k256 = { version = "0.13.4", features = ["serde", "pem"] }
+serde = { version = "1.0.228", features = ["derive"] }
+sha256 = { version = "1.6.0" }
+uint = { version = "0.10.0" }
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
