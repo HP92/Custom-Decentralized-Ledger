@@ -1,5 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use crate::types::Block;
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Blockchain {
     pub blocks: Vec<Block>,
 }
