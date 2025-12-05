@@ -108,7 +108,7 @@ impl Blockchain {
                 return Err(crate::error::BtcError::InvalidBlockHeader);
             }
 
-            block.verify_transactions(self.block_height(), &self.utxos);
+            block.verify_transactions(self.block_height(), &self.utxos)?;
         }
 
         let block_transactions: HashSet<_> =
@@ -327,5 +327,403 @@ impl Saveable for Blockchain {
     fn save<O: Write>(&self, writer: O) -> IoResult<()> {
         ciborium::ser::into_writer(self, writer)
             .map_err(|_| IoError::new(IoErrorKind::InvalidData, "Failed to serialize Blockchain"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{crypto::{PrivateKey, Signature}, MIN_TARGET, types::TransactionInput};
+    use chrono::{Utc, Duration};
+    use uuid::Uuid;
+
+    fn create_coinbase_transaction(value: u64) -> Transaction {
+        let private_key = PrivateKey::new();
+        Transaction::new(
+            vec![],
+            vec![TransactionOutput {
+                value,
+                unique_id: Uuid::new_v4(),
+                pubkey: private_key.public_key(),
+            }],
+        )
+    }
+
+    fn create_genesis_block() -> Block {
+        let transactions = vec![create_coinbase_transaction(5000000000)];
+        let merkle_root = MerkleRoot::calculate(&transactions);
+        let header = crate::types::BlockHeader::new(
+            Utc::now(),
+            0,
+            Hash::zero(),
+            merkle_root,
+            MIN_TARGET,
+        );
+        Block::new(header, transactions)
+    }
+
+    fn create_mined_genesis_block() -> Block {
+        let transactions = vec![create_coinbase_transaction(5000000000)];
+        let merkle_root = MerkleRoot::calculate(&transactions);
+        let mut header = crate::types::BlockHeader::new(
+            Utc::now(),
+            0,
+            Hash::zero(),
+            merkle_root,
+            MIN_TARGET,
+        );
+        header.mine(1000000);
+        Block::new(header, transactions)
+    }
+
+    #[test]
+    fn test_blockchain_new() {
+        let blockchain = Blockchain::new();
+        assert_eq!(blockchain.block_height(), 0);
+        assert_eq!(blockchain.blocks().len(), 0);
+        assert_eq!(blockchain.mempool().len(), 0);
+    }
+
+    #[test]
+    fn test_blockchain_add_genesis_block() {
+        let mut blockchain = Blockchain::new();
+        let block = create_genesis_block();
+        
+        let result = blockchain.add_block(block);
+        assert!(result.is_ok());
+        assert_eq!(blockchain.block_height(), 1);
+    }
+
+    #[test]
+    fn test_blockchain_reject_invalid_prev_hash() {
+        let mut blockchain = Blockchain::new();
+        let transactions = vec![create_coinbase_transaction(5000000000)];
+        let merkle_root = MerkleRoot::calculate(&transactions);
+        let header = crate::types::BlockHeader::new(
+            Utc::now(),
+            0,
+            Hash::hash(&"invalid"),
+            merkle_root,
+            MIN_TARGET,
+        );
+        let block = Block::new(header, transactions);
+        
+        let result = blockchain.add_block(block);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_blockchain_reject_invalid_target() {
+        let mut blockchain = Blockchain::new();
+        blockchain.add_block(create_mined_genesis_block()).unwrap();
+        
+        let transactions = vec![create_coinbase_transaction(5000000000)];
+        let merkle_root = MerkleRoot::calculate(&transactions);
+        let last_hash = blockchain.blocks().last().unwrap().header.hash();
+        
+        // Create block with invalid nonce (won't match target)
+        let header = crate::types::BlockHeader::new(
+            Utc::now(),
+            0,
+            last_hash,
+            merkle_root,
+            MIN_TARGET,
+        );
+        let block = Block::new(header, transactions);
+        
+        let result = blockchain.add_block(block);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_blockchain_reject_invalid_merkle_root() {
+        let mut blockchain = Blockchain::new();
+        blockchain.add_block(create_mined_genesis_block()).unwrap();
+        
+        let transactions = vec![create_coinbase_transaction(5000000000)];
+        let wrong_merkle = MerkleRoot::calculate(&[create_coinbase_transaction(1000)]);
+        let last_hash = blockchain.blocks().last().unwrap().header.hash();
+        
+        let mut header = crate::types::BlockHeader::new(
+            Utc::now(),
+            0,
+            last_hash,
+            wrong_merkle,
+            MIN_TARGET,
+        );
+        header.mine(1000000);
+        let block = Block::new(header, transactions);
+        
+        let result = blockchain.add_block(block);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_blockchain_reject_invalid_timestamp() {
+        let mut blockchain = Blockchain::new();
+        let first_block = create_mined_genesis_block();
+        let first_timestamp = first_block.header.timestamp;
+        blockchain.add_block(first_block).unwrap();
+        
+        let transactions = vec![create_coinbase_transaction(5000000000)];
+        let merkle_root = MerkleRoot::calculate(&transactions);
+        let last_hash = blockchain.blocks().last().unwrap().header.hash();
+        
+        // Create block with earlier timestamp
+        let mut header = crate::types::BlockHeader::new(
+            first_timestamp - Duration::seconds(1),
+            0,
+            last_hash,
+            merkle_root,
+            MIN_TARGET,
+        );
+        header.mine(1000000);
+        let block = Block::new(header, transactions);
+        
+        let result = blockchain.add_block(block);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_blockchain_utxos() {
+        let blockchain = Blockchain::new();
+        let utxos = blockchain.utxos();
+        assert_eq!(utxos.len(), 0);
+    }
+
+    #[test]
+    fn test_blockchain_target() {
+        let blockchain = Blockchain::new();
+        assert_eq!(blockchain.target(), MIN_TARGET);
+    }
+
+    #[test]
+    fn test_blockchain_serialization() {
+        let blockchain = Blockchain::new();
+        
+        let mut buffer = Vec::new();
+        blockchain.save(&mut buffer).expect("Failed to serialize blockchain");
+        
+        let loaded = Blockchain::load(buffer.as_slice())
+            .expect("Failed to deserialize blockchain");
+        
+        assert_eq!(loaded.block_height(), blockchain.block_height());
+    }
+
+    #[test]
+    fn test_blockchain_rebuild_utxos() {
+        let mut blockchain = Blockchain::new();
+        blockchain.rebuild_utxos();
+        assert_eq!(blockchain.utxos().len(), 0);
+    }
+
+    #[test]
+    fn test_blockchain_rebuild_utxos_with_blocks() {
+        let mut blockchain = Blockchain::new();
+        blockchain.add_block(create_genesis_block()).unwrap();
+        
+        // Clear utxos
+        blockchain.utxos.clear();
+        assert_eq!(blockchain.utxos().len(), 0);
+        
+        // Rebuild
+        blockchain.rebuild_utxos();
+        assert!(blockchain.utxos().len() > 0);
+    }
+
+    #[test]
+    fn test_blockchain_cleanup_mempool() {
+        let mut blockchain = Blockchain::new();
+        blockchain.cleanup_mempool();
+        assert_eq!(blockchain.mempool().len(), 0);
+    }
+
+    #[test]
+    fn test_blockchain_add_transaction_to_mempool_no_utxos() {
+        let mut blockchain = Blockchain::new();
+        
+        let private_key = PrivateKey::new();
+        let fake_hash = Hash::zero();
+        let signature = Signature::sign_output(&fake_hash, &private_key);
+        
+        let tx = Transaction::new(
+            vec![TransactionInput {
+                prev_transaction_output_hash: fake_hash,
+                signature,
+            }],
+            vec![TransactionOutput {
+                value: 1000,
+                unique_id: Uuid::new_v4(),
+                pubkey: private_key.public_key(),
+            }],
+        );
+        
+        let result = blockchain.add_transaction_to_mempool(tx);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_blockchain_add_transaction_duplicate_inputs() {
+        let mut blockchain = Blockchain::new();
+        blockchain.add_block(create_genesis_block()).unwrap();
+        blockchain.rebuild_utxos();
+        
+        let private_key = PrivateKey::new();
+        let utxo_hash = blockchain.utxos().keys().next().unwrap().clone();
+        let signature = Signature::sign_output(&utxo_hash, &private_key);
+        
+        let tx = Transaction::new(
+            vec![
+                TransactionInput {
+                    prev_transaction_output_hash: utxo_hash,
+                    signature: signature.clone(),
+                },
+                TransactionInput {
+                    prev_transaction_output_hash: utxo_hash,
+                    signature,
+                }
+            ],
+            vec![TransactionOutput {
+                value: 1000,
+                unique_id: Uuid::new_v4(),
+                pubkey: private_key.public_key(),
+            }],
+        );
+        
+        let result = blockchain.add_transaction_to_mempool(tx);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_blockchain_add_transaction_invalid_value() {
+        let mut blockchain = Blockchain::new();
+        blockchain.add_block(create_genesis_block()).unwrap();
+        blockchain.rebuild_utxos();
+        
+        let private_key = PrivateKey::new();
+        let utxos = blockchain.utxos();
+        let (utxo_hash, utxo_output) = utxos.iter().next().unwrap();
+        let signature = Signature::sign_output(&utxo_hash, &private_key);
+        
+        // Try to spend more than input value
+        let tx = Transaction::new(
+            vec![TransactionInput {
+                prev_transaction_output_hash: utxo_hash.clone(),
+                signature,
+            }],
+            vec![TransactionOutput {
+                value: utxo_output.value + 1000,
+                unique_id: Uuid::new_v4(),
+                pubkey: private_key.public_key(),
+            }],
+        );
+        
+        let result = blockchain.add_transaction_to_mempool(tx);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_blockchain_add_valid_transaction_to_mempool() {
+        let mut blockchain = Blockchain::new();
+        blockchain.add_block(create_genesis_block()).unwrap();
+        blockchain.rebuild_utxos();
+        
+        let private_key = PrivateKey::new();
+        let utxos = blockchain.utxos();
+        let (utxo_hash, utxo_output) = utxos.iter().next().unwrap();
+        let signature = Signature::sign_output(&utxo_hash, &private_key);
+        
+        let tx = Transaction::new(
+            vec![TransactionInput {
+                prev_transaction_output_hash: utxo_hash.clone(),
+                signature,
+            }],
+            vec![TransactionOutput {
+                value: utxo_output.value - 100,
+                unique_id: Uuid::new_v4(),
+                pubkey: private_key.public_key(),
+            }],
+        );
+        
+        let result = blockchain.add_transaction_to_mempool(tx);
+        assert!(result.is_ok());
+        assert_eq!(blockchain.mempool().len(), 1);
+    }
+
+    #[test]
+    fn test_blockchain_try_adjust_target_empty() {
+        let mut blockchain = Blockchain::new();
+        let initial_target = blockchain.target();
+        
+        blockchain.try_adjust_target();
+        
+        assert_eq!(blockchain.target(), initial_target);
+    }
+
+    #[test]
+    fn test_blockchain_try_adjust_target_not_at_interval() {
+        let mut blockchain = Blockchain::new();
+        blockchain.add_block(create_genesis_block()).unwrap();
+        let initial_target = blockchain.target();
+        
+        blockchain.try_adjust_target();
+        
+        // Should not adjust since we're not at DIFFICULTY_UPDATE_INTERVAL
+        assert_eq!(blockchain.target(), initial_target);
+    }
+
+    #[test]
+    fn test_blockchain_mempool_removes_mined_transactions() {
+        let mut blockchain = Blockchain::new();
+        
+        // Manually add some transactions to mempool
+        let tx1 = create_coinbase_transaction(1000);
+        let tx2 = create_coinbase_transaction(2000);
+        
+        blockchain.mempool.push((Utc::now(), tx1.clone()));
+        blockchain.mempool.push((Utc::now(), tx2.clone()));
+        assert_eq!(blockchain.mempool().len(), 2);
+        
+        // Add genesis block with tx1 in it
+        let transactions = vec![tx1];
+        let merkle_root = MerkleRoot::calculate(&transactions);
+        let header = crate::types::BlockHeader::new(
+            Utc::now(),
+            0,
+            Hash::zero(),
+            merkle_root,
+            MIN_TARGET,
+        );
+        let block = Block::new(header, transactions);
+        
+        blockchain.add_block(block).unwrap();
+        
+        // tx1 should be removed from mempool, but tx2 should remain
+        assert_eq!(blockchain.mempool().len(), 1);
+    }
+
+    #[test]
+    fn test_blockchain_blocks_accessor() {
+        let mut blockchain = Blockchain::new();
+        assert_eq!(blockchain.blocks().len(), 0);
+        
+        blockchain.add_block(create_genesis_block()).unwrap();
+        assert_eq!(blockchain.blocks().len(), 1);
+    }
+
+    #[test]
+    fn test_blockchain_mempool_accessor() {
+        let blockchain = Blockchain::new();
+        let mempool = blockchain.mempool();
+        assert_eq!(mempool.len(), 0);
+    }
+
+    #[test]
+    fn test_blockchain_clone() {
+        let blockchain = Blockchain::new();
+        let cloned = blockchain.clone();
+        
+        assert_eq!(blockchain.block_height(), cloned.block_height());
+        assert_eq!(blockchain.target(), cloned.target());
     }
 }

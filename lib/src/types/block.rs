@@ -168,3 +168,138 @@ impl Saveable for Block {
             .map_err(|_| IoError::new(IoErrorKind::InvalidData, "Failed to serialize Block"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{crypto::PrivateKey, utils::MerkleRoot, MIN_TARGET};
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    fn create_coinbase_transaction(value: u64) -> Transaction {
+        let private_key = PrivateKey::new();
+        Transaction::new(
+            vec![],
+            vec![TransactionOutput {
+                value,
+                unique_id: Uuid::new_v4(),
+                pubkey: private_key.public_key(),
+            }],
+        )
+    }
+
+    #[test]
+    fn test_block_creation() {
+        let transactions = vec![create_coinbase_transaction(5000000000)];
+        let merkle_root = MerkleRoot::calculate(&transactions);
+        let header = BlockHeader::new(
+            Utc::now(),
+            0,
+            Hash::zero(),
+            merkle_root,
+            MIN_TARGET,
+        );
+        let block = Block::new(header, transactions);
+
+        assert_eq!(block.transactions.len(), 1);
+    }
+
+    #[test]
+    fn test_block_hash_deterministic() {
+        let transactions = vec![create_coinbase_transaction(5000000000)];
+        let merkle_root = MerkleRoot::calculate(&transactions);
+        let header = BlockHeader::new(
+            Utc::now(),
+            0,
+            Hash::zero(),
+            merkle_root,
+            MIN_TARGET,
+        );
+        let block = Block::new(header, transactions);
+
+        let hash1 = block.hash();
+        let hash2 = block.hash();
+
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_block_verify_empty_transactions() {
+        // Create a dummy transaction for merkle root calculation
+        let dummy_tx = create_coinbase_transaction(5000000000);
+        let merkle_root = MerkleRoot::calculate(&[dummy_tx]);
+        
+        let header = BlockHeader::new(
+            Utc::now(),
+            0,
+            Hash::zero(),
+            merkle_root,
+            MIN_TARGET,
+        );
+        // Create block with empty transactions (invalid)
+        let block = Block::new(header, vec![]);
+        let utxos = HashMap::new();
+
+        let result = block.verify_transactions(0, &utxos);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_block_verify_coinbase_no_inputs() {
+        let transactions = vec![create_coinbase_transaction(5000000000)];
+        let merkle_root = MerkleRoot::calculate(&transactions);
+        let header = BlockHeader::new(
+            Utc::now(),
+            0,
+            Hash::zero(),
+            merkle_root,
+            MIN_TARGET,
+        );
+        let block = Block::new(header, transactions);
+        let utxos = HashMap::new();
+
+        let result = block.verify_coinbase_transaction(0, &utxos);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_block_serialization() {
+        let transactions = vec![create_coinbase_transaction(5000000000)];
+        let merkle_root = MerkleRoot::calculate(&transactions);
+        let header = BlockHeader::new(
+            Utc::now(),
+            0,
+            Hash::zero(),
+            merkle_root,
+            MIN_TARGET,
+        );
+        let block = Block::new(header, transactions);
+
+        let mut buffer = Vec::new();
+        block.save(&mut buffer).expect("Failed to serialize block");
+
+        let loaded_block = Block::load(buffer.as_slice())
+            .expect("Failed to deserialize block");
+
+        assert_eq!(block.transactions.len(), loaded_block.transactions.len());
+    }
+
+    #[test]
+    fn test_calculated_miner_fees_no_transactions() {
+        let transactions = vec![create_coinbase_transaction(5000000000)];
+        let merkle_root = MerkleRoot::calculate(&transactions);
+        let header = BlockHeader::new(
+            Utc::now(),
+            0,
+            Hash::zero(),
+            merkle_root,
+            MIN_TARGET,
+        );
+        let block = Block::new(header, transactions);
+        let utxos = HashMap::new();
+
+        let fees = block.calculated_miner_fees(&utxos);
+        assert!(fees.is_ok());
+        assert_eq!(fees.unwrap(), 0);
+    }
+}
