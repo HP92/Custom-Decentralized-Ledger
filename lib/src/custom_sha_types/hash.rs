@@ -5,7 +5,7 @@ use sha256::digest;
 
 use crate::U256;
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
 pub struct Hash(U256);
 
 impl Hash {
@@ -32,5 +32,9 @@ impl Hash {
 
     pub fn zero() -> Self {
         Hash(U256::zero())
+    }
+
+    pub fn as_bytes(&self) -> [u8; 32] {
+        self.0.to_little_endian()
     }
 }

@@ -34,6 +34,26 @@ impl BlockHeader {
             target,
         }
     }
+
+    pub fn mine(&mut self, steps: usize) -> bool {
+        if self.hash().matches_target(self.target) {
+            return true;
+        }
+        for _ in 0..steps {
+            if let Some(new_nonce) = self.nonce.checked_add(1) {
+                self.nonce = new_nonce;
+            } else {
+                self.nonce = 0;
+                self.timestamp = Utc::now();
+            }
+
+            if self.hash().matches_target(self.target) {
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn hash(&self) -> Hash {
         Hash::hash(self)
     }

@@ -7,7 +7,7 @@ use rand_core::OsRng; // Use rand_core's OsRng for compatibility
 use crate::crypto::PublicKey;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PrivateKey(#[serde(with = "signkey_serde")] SigningKey<Secp256k1>);
+pub struct PrivateKey(#[serde(with = "signkey_serde")] pub SigningKey<Secp256k1>);
 
 impl PrivateKey {
     pub fn new() -> Self {
