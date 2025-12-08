@@ -14,8 +14,8 @@ use crate::{
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Block {
-    pub header: BlockHeader,
-    pub transactions: Vec<Transaction>,
+    header: BlockHeader,
+    transactions: Vec<Transaction>,
 }
 
 impl Block {
@@ -44,36 +44,33 @@ impl Block {
         // Verify coinbase transaction
         self.verify_coinbase_transaction(predicted_block_height, utxos)?;
 
-        for transaction in self.transactions.clone() {
+        for transaction in &self.transactions {
             let mut input_value = 0;
             let mut output_value = 0;
-            for input in &transaction.inputs {
+            for input in transaction.inputs() {
                 let prev_output = utxos
-                    .get(&input.prev_transaction_output_hash)
+                    .get(input.prev_transaction_output_hash())
                     .map(|(_, output)| output);
 
-                if prev_output.is_none() {
-                    return Err(BtcError::InvalidTransaction);
-                }
+                let prev_output = prev_output.ok_or(BtcError::InvalidTransaction)?;
 
-                let prev_output = prev_output.unwrap();
-                if inputs.contains_key(&input.prev_transaction_output_hash) {
+                if inputs.contains_key(input.prev_transaction_output_hash()) {
                     return Err(BtcError::DoubleSpending);
                 }
 
                 if !input
-                    .signature
-                    .verify(&input.prev_transaction_output_hash, &prev_output.pubkey)
+                    .signature()
+                    .verify(input.prev_transaction_output_hash(), prev_output.pubkey())
                 {
                     return Err(BtcError::InvalidSignature);
                 }
 
-                input_value += prev_output.value;
-                inputs.insert(input.prev_transaction_output_hash, prev_output.clone());
+                input_value += prev_output.value();
+                inputs.insert(*input.prev_transaction_output_hash(), prev_output.clone());
             }
 
-            for output in &transaction.outputs {
-                output_value += output.value;
+            for output in transaction.outputs() {
+                output_value += output.value();
             }
 
             if input_value < output_value {
@@ -91,11 +88,11 @@ impl Block {
     ) -> Result<()> {
         let coinbase_transaction = &self.transactions[0];
 
-        if coinbase_transaction.inputs.len() != 0 {
+        if !coinbase_transaction.inputs().is_empty() {
             return Err(BtcError::InvalidTransaction);
         }
 
-        if coinbase_transaction.outputs.len() == 0 {
+        if coinbase_transaction.outputs().is_empty() {
             return Err(BtcError::InvalidTransaction);
         }
 
@@ -104,9 +101,9 @@ impl Block {
             / 2u64.pow((predicted_block_height / crate::HALVING_INTERVAL) as u32);
 
         let total_coinbase_outputs: u64 = coinbase_transaction
-            .outputs
+            .outputs()
             .iter()
-            .map(|output| output.value)
+            .map(|output| output.value())
             .sum();
 
         if total_coinbase_outputs != block_reward + miner_fees {
@@ -124,36 +121,43 @@ impl Block {
         let mut outputs: HashMap<Hash, TransactionOutput> = HashMap::new();
 
         for transaction in &self.transactions[1..] {
-            for input in &transaction.inputs {
+            for input in transaction.inputs() {
+                let previous_transaction_output_hash = input.prev_transaction_output_hash();
+                if inputs.contains_key(previous_transaction_output_hash) {
+                    return Err(BtcError::DoubleSpending);
+                }
+
                 let prev_output = utxos
-                    .get(&input.prev_transaction_output_hash)
+                    .get(previous_transaction_output_hash)
                     .map(|(_, output)| output);
 
-                if prev_output.is_none() {
-                    return Err(BtcError::InvalidTransaction);
-                }
-
-                let prev_output = prev_output.unwrap();
-                if inputs.contains_key(&input.prev_transaction_output_hash) {
-                    return Err(BtcError::DoubleSpending);
-                }
-
-                inputs.insert(input.prev_transaction_output_hash, prev_output.clone());
+                let prev_output = prev_output.ok_or(BtcError::InvalidTransaction)?;
+                
+                inputs.insert(*previous_transaction_output_hash, prev_output.clone());
             }
 
-            for output in &transaction.outputs {
-                if outputs.contains_key(&output.hash()) {
+            for output in transaction.outputs() {
+                if outputs.insert(output.hash(), output.clone()).is_some() {
                     return Err(BtcError::DoubleSpending);
                 }
-
-                outputs.insert(output.hash(), output.clone());
             }
         }
 
-        let input_value: u64 = inputs.values().map(|output| output.value).sum();
-        let output_value: u64 = outputs.values().map(|output| output.value).sum();
+        let input_value: u64 = inputs.values().map(|output| output.value()).sum();
+        let output_value: u64 = outputs.values().map(|output| output.value()).sum();
 
-        Ok(input_value - output_value)
+        match input_value.checked_sub(output_value) {
+            Some(fee) => Ok(fee),
+            None => Err(BtcError::InvalidTransaction),
+        }
+    }
+
+    pub fn header(&self) -> &BlockHeader {
+        &self.header
+    }
+
+    pub fn transactions(&self) -> &Vec<Transaction> {
+        &self.transactions
     }
 }
 
@@ -172,19 +176,19 @@ impl Saveable for Block {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{crypto::PrivateKey, utils::MerkleRoot, MIN_TARGET};
+    use crate::{MIN_TARGET, crypto::PrivateKey, utils::MerkleRoot};
     use chrono::Utc;
     use uuid::Uuid;
 
     fn create_coinbase_transaction(value: u64) -> Transaction {
-        let private_key = PrivateKey::new();
+        let private_key = PrivateKey::default();
         Transaction::new(
             vec![],
-            vec![TransactionOutput {
+            vec![TransactionOutput::new(
                 value,
-                unique_id: Uuid::new_v4(),
-                pubkey: private_key.public_key(),
-            }],
+                Uuid::new_v4(),
+                private_key.public_key(),
+            )],
         )
     }
 
@@ -192,13 +196,7 @@ mod tests {
     fn test_block_creation() {
         let transactions = vec![create_coinbase_transaction(5000000000)];
         let merkle_root = MerkleRoot::calculate(&transactions);
-        let header = BlockHeader::new(
-            Utc::now(),
-            0,
-            Hash::zero(),
-            merkle_root,
-            MIN_TARGET,
-        );
+        let header = BlockHeader::new(Utc::now(), 0, Hash::zero(), merkle_root, MIN_TARGET);
         let block = Block::new(header, transactions);
 
         assert_eq!(block.transactions.len(), 1);
@@ -208,13 +206,7 @@ mod tests {
     fn test_block_hash_deterministic() {
         let transactions = vec![create_coinbase_transaction(5000000000)];
         let merkle_root = MerkleRoot::calculate(&transactions);
-        let header = BlockHeader::new(
-            Utc::now(),
-            0,
-            Hash::zero(),
-            merkle_root,
-            MIN_TARGET,
-        );
+        let header = BlockHeader::new(Utc::now(), 0, Hash::zero(), merkle_root, MIN_TARGET);
         let block = Block::new(header, transactions);
 
         let hash1 = block.hash();
@@ -228,14 +220,8 @@ mod tests {
         // Create a dummy transaction for merkle root calculation
         let dummy_tx = create_coinbase_transaction(5000000000);
         let merkle_root = MerkleRoot::calculate(&[dummy_tx]);
-        
-        let header = BlockHeader::new(
-            Utc::now(),
-            0,
-            Hash::zero(),
-            merkle_root,
-            MIN_TARGET,
-        );
+
+        let header = BlockHeader::new(Utc::now(), 0, Hash::zero(), merkle_root, MIN_TARGET);
         // Create block with empty transactions (invalid)
         let block = Block::new(header, vec![]);
         let utxos = HashMap::new();
@@ -248,13 +234,7 @@ mod tests {
     fn test_block_verify_coinbase_no_inputs() {
         let transactions = vec![create_coinbase_transaction(5000000000)];
         let merkle_root = MerkleRoot::calculate(&transactions);
-        let header = BlockHeader::new(
-            Utc::now(),
-            0,
-            Hash::zero(),
-            merkle_root,
-            MIN_TARGET,
-        );
+        let header = BlockHeader::new(Utc::now(), 0, Hash::zero(), merkle_root, MIN_TARGET);
         let block = Block::new(header, transactions);
         let utxos = HashMap::new();
 
@@ -266,20 +246,13 @@ mod tests {
     fn test_block_serialization() {
         let transactions = vec![create_coinbase_transaction(5000000000)];
         let merkle_root = MerkleRoot::calculate(&transactions);
-        let header = BlockHeader::new(
-            Utc::now(),
-            0,
-            Hash::zero(),
-            merkle_root,
-            MIN_TARGET,
-        );
+        let header = BlockHeader::new(Utc::now(), 0, Hash::zero(), merkle_root, MIN_TARGET);
         let block = Block::new(header, transactions);
 
         let mut buffer = Vec::new();
         block.save(&mut buffer).expect("Failed to serialize block");
 
-        let loaded_block = Block::load(buffer.as_slice())
-            .expect("Failed to deserialize block");
+        let loaded_block = Block::load(buffer.as_slice()).expect("Failed to deserialize block");
 
         assert_eq!(block.transactions.len(), loaded_block.transactions.len());
     }
@@ -288,13 +261,7 @@ mod tests {
     fn test_calculated_miner_fees_no_transactions() {
         let transactions = vec![create_coinbase_transaction(5000000000)];
         let merkle_root = MerkleRoot::calculate(&transactions);
-        let header = BlockHeader::new(
-            Utc::now(),
-            0,
-            Hash::zero(),
-            merkle_root,
-            MIN_TARGET,
-        );
+        let header = BlockHeader::new(Utc::now(), 0, Hash::zero(), merkle_root, MIN_TARGET);
         let block = Block::new(header, transactions);
         let utxos = HashMap::new();
 

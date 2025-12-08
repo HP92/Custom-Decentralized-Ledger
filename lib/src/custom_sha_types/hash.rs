@@ -1,5 +1,6 @@
 use std::vec;
 
+use ciborium::ser::into_writer;
 use serde::{Deserialize, Serialize};
 use sha256::digest;
 
@@ -12,7 +13,7 @@ impl Hash {
     pub fn hash<T: serde::Serialize>(data: &T) -> Self {
         let mut serialized: Vec<u8> = vec![];
 
-        if let Err(e) = ciborium::ser::into_writer(data, &mut serialized) {
+        if let Err(e) = into_writer(data, &mut serialized) {
             panic!("Failed to serialize data for hashing: {}", e);
         }
 
@@ -35,6 +36,6 @@ impl Hash {
     }
 
     pub fn as_bytes(&self) -> [u8; 32] {
-        self.0.to_little_endian()
+        self.0.to_big_endian()
     }
 }

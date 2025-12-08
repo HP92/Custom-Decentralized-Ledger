@@ -5,14 +5,34 @@ use crate::{crypto::PublicKey, custom_sha_types::Hash};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TransactionOutput {
-    pub value: u64,
-    pub unique_id: Uuid,
-    pub pubkey: PublicKey,
+    value: u64,
+    unique_id: Uuid,
+    pubkey: PublicKey,
 }
 
 impl TransactionOutput {
+    pub fn new(value: u64, unique_id: Uuid, pubkey: PublicKey) -> Self {
+        TransactionOutput {
+            value,
+            unique_id,
+            pubkey,
+        }
+    }
+
     pub fn hash(&self) -> Hash {
         Hash::hash(self)
+    }
+
+    pub fn value(&self) -> u64 {
+        self.value
+    }
+
+    pub fn pubkey(&self) -> &PublicKey {
+        &self.pubkey
+    }
+
+    pub fn unique_id(&self) -> &Uuid {
+        &self.unique_id
     }
 }
 
@@ -23,7 +43,7 @@ mod tests {
 
     #[test]
     fn test_transaction_output_creation() {
-        let private_key = PrivateKey::new();
+        let private_key = PrivateKey::default();
         let output = TransactionOutput {
             value: 1000,
             unique_id: Uuid::new_v4(),
@@ -35,7 +55,7 @@ mod tests {
 
     #[test]
     fn test_transaction_output_hash_deterministic() {
-        let private_key = PrivateKey::new();
+        let private_key = PrivateKey::default();
         let unique_id = Uuid::new_v4();
         let output = TransactionOutput {
             value: 1000,
@@ -45,13 +65,13 @@ mod tests {
 
         let hash1 = output.hash();
         let hash2 = output.hash();
-        
+
         assert_eq!(hash1, hash2);
     }
 
     #[test]
     fn test_transaction_output_different_hashes() {
-        let private_key = PrivateKey::new();
+        let private_key = PrivateKey::default();
         let output1 = TransactionOutput {
             value: 1000,
             unique_id: Uuid::new_v4(),

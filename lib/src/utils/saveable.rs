@@ -31,14 +31,14 @@ mod tests {
     use uuid::Uuid;
 
     fn create_test_transaction(value: u64) -> Transaction {
-        let private_key = PrivateKey::new();
+        let private_key = PrivateKey::default();
         Transaction::new(
             vec![],
-            vec![TransactionOutput {
+            vec![TransactionOutput::new(
                 value,
-                unique_id: Uuid::new_v4(),
-                pubkey: private_key.public_key(),
-            }],
+                Uuid::new_v4(),
+                private_key.public_key(),
+            )],
         )
     }
 
@@ -51,12 +51,11 @@ mod tests {
         tx.save_to_file(temp_path).expect("Failed to save to file");
 
         // Load from file
-        let loaded_tx = Transaction::load_from_file(temp_path)
-            .expect("Failed to load from file");
+        let loaded_tx = Transaction::load_from_file(temp_path).expect("Failed to load from file");
 
         // Verify the data matches
-        assert_eq!(tx.outputs.len(), loaded_tx.outputs.len());
-        assert_eq!(tx.outputs[0].value, loaded_tx.outputs[0].value);
+        assert_eq!(tx.outputs().len(), loaded_tx.outputs().len());
+        assert_eq!(tx.outputs()[0].value(), loaded_tx.outputs()[0].value());
 
         // Cleanup
         fs::remove_file(temp_path).ok();
@@ -71,21 +70,20 @@ mod tests {
         tx.save(&mut buffer).expect("Failed to save to buffer");
 
         // Load from memory buffer
-        let loaded_tx = Transaction::load(buffer.as_slice())
-            .expect("Failed to load from buffer");
+        let loaded_tx = Transaction::load(buffer.as_slice()).expect("Failed to load from buffer");
 
         // Verify the data matches
-        assert_eq!(tx.outputs.len(), loaded_tx.outputs.len());
-        assert_eq!(tx.outputs[0].value, loaded_tx.outputs[0].value);
+        assert_eq!(tx.outputs().len(), loaded_tx.outputs().len());
+        assert_eq!(tx.outputs()[0].value(), loaded_tx.outputs()[0].value());
     }
 
     #[test]
     fn test_save_to_nonexistent_directory() {
         let tx = create_test_transaction(3000);
-        
+
         // Try to save to a directory that doesn't exist
         let result = tx.save_to_file("nonexistent_dir/test.cbor");
-        
+
         // Should fail because directory doesn't exist
         assert!(result.is_err());
     }
@@ -94,7 +92,7 @@ mod tests {
     fn test_load_from_nonexistent_file() {
         // Try to load from a file that doesn't exist
         let result = Transaction::load_from_file("this_file_does_not_exist.cbor");
-        
+
         // Should fail
         assert!(result.is_err());
     }
@@ -106,16 +104,16 @@ mod tests {
 
         // First save and load
         tx.save_to_file(temp_path).expect("Failed to save");
-        let loaded1 = Transaction::load_from_file(temp_path)
-            .expect("Failed to load");
+        let loaded1 = Transaction::load_from_file(temp_path).expect("Failed to load");
 
         // Second save and load (overwrite)
-        loaded1.save_to_file(temp_path).expect("Failed to save again");
-        let loaded2 = Transaction::load_from_file(temp_path)
-            .expect("Failed to load again");
+        loaded1
+            .save_to_file(temp_path)
+            .expect("Failed to save again");
+        let loaded2 = Transaction::load_from_file(temp_path).expect("Failed to load again");
 
         // Verify consistency
-        assert_eq!(tx.outputs[0].value, loaded2.outputs[0].value);
+        assert_eq!(tx.outputs()[0].value(), loaded2.outputs()[0].value());
 
         // Cleanup
         fs::remove_file(temp_path).ok();
@@ -124,10 +122,10 @@ mod tests {
     #[test]
     fn test_save_to_empty_path_string() {
         let tx = create_test_transaction(1000);
-        
+
         // Empty string should create a file (though it's not a valid practice)
         let result = tx.save_to_file("");
-        
+
         // This will fail on most systems
         assert!(result.is_err());
     }

@@ -7,15 +7,15 @@ use crate::{U256, utils::MerkleRoot};
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct BlockHeader {
     /// Timestamp of the block
-    pub timestamp: DateTime<Utc>,
+    timestamp: DateTime<Utc>,
     /// Nonce used to mine the block
-    pub nonce: u64,
+    nonce: u64,
     /// Hash of the previous block
-    pub prev_block_hash: Hash,
+    prev_block_hash: Hash,
     /// Merkle root of the block's transactions
-    pub merkle_root: MerkleRoot,
-    /// target
-    pub target: U256,
+    merkle_root: MerkleRoot,
+    /// Proof-of-work difficulty target. The block hash must be less than or equal to this value for the block to be valid.
+    target: U256,
 }
 
 impl BlockHeader {
@@ -35,6 +35,13 @@ impl BlockHeader {
         }
     }
 
+    /// Attempts to find a valid nonce such that the block header's hash meets the target difficulty.
+    ///
+    /// Performs up to `steps` iterations, incrementing the nonce and updating the timestamp if the nonce overflows.
+    /// Returns `true` if a valid nonce is found within the given steps, otherwise returns `false`.
+    ///
+    /// If `false` is returned, users may call this method again to continue mining, or adjust the target difficulty
+    /// if mining is taking too long or is not feasible.
     pub fn mine(&mut self, steps: usize) -> bool {
         if self.hash().matches_target(self.target) {
             return true;
@@ -57,23 +64,47 @@ impl BlockHeader {
     pub fn hash(&self) -> Hash {
         Hash::hash(self)
     }
+
+    pub fn target(&self) -> U256 {
+        self.target
+    }
+
+    pub fn timestamp(&self) -> DateTime<Utc> {
+        self.timestamp
+    }
+
+    pub fn nonce(&self) -> u64 {
+        self.nonce
+    }
+
+    pub fn prev_block_hash(&self) -> &Hash {
+        &self.prev_block_hash
+    }
+
+    pub fn merkle_root(&self) -> &MerkleRoot {
+        &self.merkle_root
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MIN_TARGET, crypto::PrivateKey, types::{Transaction, TransactionOutput}};
+    use crate::{
+        MIN_TARGET,
+        crypto::PrivateKey,
+        types::{Transaction, TransactionOutput},
+    };
     use uuid::Uuid;
 
     fn create_test_merkle_root() -> MerkleRoot {
-        let private_key = PrivateKey::new();
+        let private_key = PrivateKey::default();
         let tx = Transaction::new(
             vec![],
-            vec![TransactionOutput {
-                value: 1000,
-                unique_id: Uuid::new_v4(),
-                pubkey: private_key.public_key(),
-            }],
+            vec![TransactionOutput::new(
+                1000,
+                Uuid::new_v4(),
+                private_key.public_key(),
+            )],
         );
         MerkleRoot::calculate(&[tx])
     }
@@ -82,13 +113,7 @@ mod tests {
     fn test_block_header_creation() {
         let timestamp = Utc::now();
         let merkle_root = create_test_merkle_root();
-        let header = BlockHeader::new(
-            timestamp,
-            0,
-            Hash::zero(),
-            merkle_root,
-            MIN_TARGET,
-        );
+        let header = BlockHeader::new(timestamp, 0, Hash::zero(), merkle_root, MIN_TARGET);
 
         assert_eq!(header.nonce, 0);
         assert_eq!(header.prev_block_hash, Hash::zero());
@@ -99,13 +124,7 @@ mod tests {
     fn test_block_header_hash_deterministic() {
         let timestamp = Utc::now();
         let merkle_root = create_test_merkle_root();
-        let header = BlockHeader::new(
-            timestamp,
-            0,
-            Hash::zero(),
-            merkle_root,
-            MIN_TARGET,
-        );
+        let header = BlockHeader::new(timestamp, 0, Hash::zero(), merkle_root, MIN_TARGET);
 
         let hash1 = header.hash();
         let hash2 = header.hash();
@@ -117,17 +136,11 @@ mod tests {
     fn test_block_header_nonce_increment() {
         let timestamp = Utc::now();
         let merkle_root = create_test_merkle_root();
-        let mut header = BlockHeader::new(
-            timestamp,
-            0,
-            Hash::zero(),
-            merkle_root,
-            MIN_TARGET,
-        );
+        let mut header = BlockHeader::new(timestamp, 0, Hash::zero(), merkle_root, MIN_TARGET);
 
         let initial_nonce = header.nonce;
         header.mine(1);
-        
+
         assert_ne!(header.nonce, initial_nonce);
     }
 
@@ -138,13 +151,7 @@ mod tests {
         let merkle_root = create_test_merkle_root();
         // Use a very easy target (close to max value) for testing
         let easy_target = U256::MAX / 100;
-        let mut header = BlockHeader::new(
-            timestamp,
-            0,
-            Hash::zero(),
-            merkle_root,
-            easy_target,
-        );
+        let mut header = BlockHeader::new(timestamp, 0, Hash::zero(), merkle_root, easy_target);
 
         let result = header.mine(100000);
         assert!(result);
@@ -155,20 +162,8 @@ mod tests {
     fn test_block_header_different_nonce_different_hash() {
         let timestamp = Utc::now();
         let merkle_root = create_test_merkle_root();
-        let header1 = BlockHeader::new(
-            timestamp,
-            0,
-            Hash::zero(),
-            merkle_root,
-            MIN_TARGET,
-        );
-        let header2 = BlockHeader::new(
-            timestamp,
-            1,
-            Hash::zero(),
-            merkle_root,
-            MIN_TARGET,
-        );
+        let header1 = BlockHeader::new(timestamp, 0, Hash::zero(), merkle_root, MIN_TARGET);
+        let header2 = BlockHeader::new(timestamp, 1, Hash::zero(), merkle_root, MIN_TARGET);
 
         assert_ne!(header1.hash(), header2.hash());
     }

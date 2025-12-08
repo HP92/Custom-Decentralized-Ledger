@@ -10,8 +10,8 @@ use crate::{
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Transaction {
-    pub inputs: Vec<TransactionInput>,
-    pub outputs: Vec<TransactionOutput>,
+    inputs: Vec<TransactionInput>,
+    outputs: Vec<TransactionOutput>,
 }
 
 impl Transaction {
@@ -21,6 +21,14 @@ impl Transaction {
 
     pub fn hash(&self) -> Hash {
         Hash::hash(self)
+    }
+
+    pub fn inputs(&self) -> &Vec<TransactionInput> {
+        &self.inputs
+    }
+
+    pub fn outputs(&self) -> &Vec<TransactionOutput> {
+        &self.outputs
     }
 }
 
@@ -46,12 +54,8 @@ mod tests {
     use uuid::Uuid;
 
     fn create_test_output(value: u64) -> TransactionOutput {
-        let private_key = PrivateKey::new();
-        TransactionOutput {
-            value,
-            unique_id: Uuid::new_v4(),
-            pubkey: private_key.public_key(),
-        }
+        let private_key = PrivateKey::default();
+        TransactionOutput::new(value, Uuid::new_v4(), private_key.public_key())
     }
 
     #[test]
@@ -61,7 +65,7 @@ mod tests {
 
         assert_eq!(tx.inputs.len(), 0);
         assert_eq!(tx.outputs.len(), 1);
-        assert_eq!(tx.outputs[0].value, 1000);
+        assert_eq!(tx.outputs[0].value(), 1000);
     }
 
     #[test]
@@ -89,13 +93,14 @@ mod tests {
         let tx = Transaction::new(vec![], outputs);
 
         let mut buffer = Vec::new();
-        tx.save(&mut buffer).expect("Failed to serialize transaction");
+        tx.save(&mut buffer)
+            .expect("Failed to serialize transaction");
 
-        let loaded_tx = Transaction::load(buffer.as_slice())
-            .expect("Failed to deserialize transaction");
+        let loaded_tx =
+            Transaction::load(buffer.as_slice()).expect("Failed to deserialize transaction");
 
         assert_eq!(tx.outputs.len(), loaded_tx.outputs.len());
-        assert_eq!(tx.outputs[0].value, loaded_tx.outputs[0].value);
+        assert_eq!(tx.outputs[0].value(), loaded_tx.outputs[0].value());
     }
 
     #[test]
