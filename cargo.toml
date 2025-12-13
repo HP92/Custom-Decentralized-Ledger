@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = [
+ "lib",
+ "miner",
+ "node",
+ "wallet",
+]
+
+[workspace.lints]
+[workspace.lints.clippy]
+# yes, Cloudflare, I'm looking at you
+unwrap_used = "deny"
+expect_used = "deny"
+suspicious = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+correctness = "deny"
+style = "deny"
