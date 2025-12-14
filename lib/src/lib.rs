@@ -27,6 +27,7 @@ pub const MAX_MEMPOOL_TX_AGE: u64 = 600; // 10 minutes
 
 pub mod crypto;
 pub mod custom_sha_types;
+pub mod network;
 pub mod error;
 pub mod types;
 pub mod utils;

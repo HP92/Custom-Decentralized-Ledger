@@ -124,16 +124,43 @@ Built on `k256` (secp256k1 curve) and `ecdsa`:
 
 Located in [`src/bin/`](src/bin/):
 
+### Transaction Utilities
+
 - **`tx_gen`**: Generate a sample transaction
   ```bash
   cargo run --bin tx_gen <output_file>
+  # Example:
+  cargo run --bin tx_gen my_transaction.cbor
   ```
 
 - **`tx_print`**: Display transaction contents
   ```bash
   cargo run --bin tx_print <tx_file>
+  # Example:
+  cargo run --bin tx_print tx.cbor
   ```
+
+### Block Utilities
 
 - **`block_gen`**: Generate a sample block
   ```bash
-  cargo run --bin block_gen 
+  cargo run --bin block_gen <output_file>
+  # Example:
+  cargo run --bin block_gen my_block.cbor
+  ```
+
+- **`block_print`**: Display block contents
+  ```bash
+  cargo run --bin block_print <block_file>
+  # Example:
+  cargo run --bin block_print my_block.cbor
+  ```
+
+### Key Management Utilities
+
+- **`key_gen`**: Generate cryptographic key pairs
+  ```bash
+  cargo run --bin key_gen <name>
+  # Example:
+  cargo run --bin key_gen alice
+  # Creates: alice.pub.pem and alice.priv.cbor 
