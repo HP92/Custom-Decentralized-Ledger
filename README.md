@@ -107,13 +107,6 @@ cargo run -p miner -- <block_file> <steps>
 cargo run -p miner -- my_block.cbor 1000
 ```
 
-Run the offline miner:
-```bash
-cargo run -p miner -- <block_file> <steps>
-# Example:
-cargo run -p miner -- my_block.cbor 1000
-```
-
 Run the online miner:
 ```bash
 cargo run --bin online_miner -- <address> <public_key_file>
