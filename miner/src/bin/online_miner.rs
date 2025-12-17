@@ -1,6 +1,7 @@
 use btclib::{crypto::PublicKey, utils::Saveable};
 use clap::{Arg, Command};
-use log::{debug, info};
+use log::{debug, error, info};
+use std::sync::{Arc, atomic::AtomicBool};
 use std::process::exit;
 // Import Miner from its module (adjust the path if needed)
 use miner::Miner;
@@ -32,38 +33,41 @@ async fn main() {
 
     // Validate address format (should be "host:port")
     if address.matches(':').count() != 1 {
-        eprintln!("Invalid address format: '{}'. Expected format is 'host:port' (e.g., 127.0.0.1:8080)", address);
+        error!("Invalid address format: '{}'. Expected format is 'host:port' (e.g., 127.0.0.1:8080)", address);
         exit(1);
     }
 
     let Ok(public_key) = PublicKey::load_from_file(public_key_file) else {
-        eprintln!("Error reading public key from file {}", public_key_file);
+        error!("Error reading public key from file {}", public_key_file);
         exit(1);
     };
-    info!("Connecting to {address} to mine");
+    info!("Connecting to {} to mine", address);
     debug!("Loaded public key: {:?}", public_key);
 
     // let mut stream = match TcpStream::connect(&address).await {
     //     Ok(stream) => stream,
     //     Err(e) => {
-    //         eprintln!("Failed to connect to server: {}", e);
+    //         error!("Failed to connect to server: {}", e);
     //         exit(1);
     //     }
     // };
 
-    // println!("requesting work from {address}");
+    // info!("Requesting work from {}", address);
     // let message = Message::FetchTemplate(public_key);
     // message.send_async(&mut stream).await.unwrap();
 
     let miner = match Miner::new(address.clone(), public_key).await {
         Ok(miner) => miner,
         Err(e) => {
-            eprintln!("Failed to connect to server at {address}: {e}\nIs the node running and listening on {address}?");
+            error!("Failed to connect to server at {}: {}\nIs the node running and listening on {}?", address, e, address);
             exit(1);
         }
     };
-    if let Err(e) = miner.run().await {
-        eprintln!("Miner error: {e}");
+
+    // Create a shared AtomicBool for graceful shutdown or control
+    let running = Arc::new(AtomicBool::new(true));
+    if let Err(e) = miner.run(running.clone()).await {
+        error!("Miner error: {}", e);
         exit(1);
     }
 }

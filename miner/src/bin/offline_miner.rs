@@ -31,7 +31,7 @@ fn main() {
     let og_block = Block::load_from_file(path).expect("Failed to load block");
     let mut block = og_block.clone();
 
-    while !block.header_mut().mine(steps) {
+    while !block.mine(steps) {
         info!("mining...");
     }
 

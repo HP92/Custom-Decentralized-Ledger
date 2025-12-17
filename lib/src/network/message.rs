@@ -2,11 +2,9 @@ use crate::{
     crypto::PublicKey,
     types::{Block, Transaction, TransactionOutput},
 };
-use tokio::io::{
- AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
-};
 use serde::{Deserialize, Serialize};
 use std::io::{Error as IoError, Read, Write};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Message {
@@ -68,10 +66,18 @@ impl Message {
         Ok(())
     }
 
+    const MAX_MESSAGE_SIZE: usize = 10 * 1024 * 1024; // 10 MB
+
     pub fn receive(stream: &mut impl Read) -> Result<Self, ciborium::de::Error<IoError>> {
         let mut len_bytes = [0u8; 8];
         stream.read_exact(&mut len_bytes)?;
         let len = u64::from_be_bytes(len_bytes) as usize;
+        if len > Self::MAX_MESSAGE_SIZE {
+            return Err(ciborium::de::Error::Io(IoError::new(
+                std::io::ErrorKind::InvalidData,
+                "Message size exceeds maximum allowed",
+            )));
+        }
         let mut buffer = vec![0u8; len];
         stream.read_exact(&mut buffer)?;
         Self::decode(&buffer)
@@ -94,6 +100,12 @@ impl Message {
         let mut len_bytes = [0u8; 8];
         stream.read_exact(&mut len_bytes).await?;
         let len = u64::from_be_bytes(len_bytes) as usize;
+        if len > Self::MAX_MESSAGE_SIZE {
+            return Err(ciborium::de::Error::Io(IoError::new(
+                std::io::ErrorKind::InvalidData,
+                "Message size exceeds maximum allowed",
+            )));
+        }
         let mut buffer = vec![0u8; len];
         stream.read_exact(&mut buffer).await?;
         Self::decode(&buffer)

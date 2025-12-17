@@ -156,8 +156,8 @@ impl Block {
         &self.header
     }
 
-    pub fn header_mut(&mut self) -> &mut BlockHeader {
-        &mut self.header
+    pub fn mine(&mut self, steps: usize) -> bool {
+        self.header.mine(steps)
     }
 
     pub fn transactions(&self) -> &Vec<Transaction> {

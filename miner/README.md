@@ -23,9 +23,11 @@ miner/
 ├── my_block.cbor           # Example block template
 ├── alice.pub.pem           # Example public key for mining rewards
 └── src/
-    ├── main.rs             # Offline miner (standalone)
     └── bin/
-        └── main.rs         # Online miner (network-connected)
+        ├── offline_miner.rs    # Offline miner (standalone)
+        └── online_miner.rs     # Online miner (network-connected)
+
+> **Note:** The offline miner is implemented as a binary target (`offline_miner`). To run it, use `cargo run -p miner --bin offline_miner -- ...` instead of `cargo run -p miner -- ...`. If you want to use `cargo run -p miner -- ...` directly, set `offline_miner` as the default binary in your `Cargo.toml`.
 ```
 
 ## Mining Modes
