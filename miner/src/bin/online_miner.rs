@@ -1,8 +1,8 @@
 use btclib::{crypto::PublicKey, utils::Saveable};
 use clap::{Arg, Command};
 use log::{debug, error, info};
-use std::sync::{Arc, atomic::AtomicBool};
 use std::process::exit;
+use std::sync::{Arc, atomic::AtomicBool};
 // Import Miner from its module (adjust the path if needed)
 use miner::Miner;
 
@@ -33,7 +33,10 @@ async fn main() {
 
     // Validate address format (should be "host:port")
     if address.matches(':').count() != 1 {
-        error!("Invalid address format: '{}'. Expected format is 'host:port' (e.g., 127.0.0.1:8080)", address);
+        error!(
+            "Invalid address format: '{}'. Expected format is 'host:port' (e.g., 127.0.0.1:8080)",
+            address
+        );
         exit(1);
     }
 
@@ -59,7 +62,10 @@ async fn main() {
     let miner = match Miner::new(address.clone(), public_key).await {
         Ok(miner) => miner,
         Err(e) => {
-            error!("Failed to connect to server at {}: {}\nIs the node running and listening on {}?", address, e, address);
+            error!(
+                "Failed to connect to server at {}: {}\nIs the node running and listening on {}?",
+                address, e, address
+            );
             exit(1);
         }
     };

@@ -68,28 +68,25 @@ impl Miner {
         let template = self.current_template.clone();
         let mining = self.mining.clone();
         let sender = self.mined_block_sender.clone();
-                thread::yield_now();
-                thread::sleep(Duration::from_millis(10));
-            loop {
-                if mining.load(Ordering::SeqCst)
-                    && template.lock().unwrap().is_some()
-                {
-                    let mut block = template.lock().unwrap().clone().unwrap();
-                    info!("Mining block with target: {}", block.header().target());
-                    if block.mine(2_000_000) {
-                        info!("Block mined: {:?}", block.hash());
-                        sender.send(block).expect("Failed to send mined block");
-                        mining.store(false, Ordering::SeqCst);
-                    }
+        thread::yield_now();
+        thread::sleep(Duration::from_millis(10));
+        loop {
+            if mining.load(Ordering::SeqCst) && template.lock().unwrap().is_some() {
+                let mut block = template.lock().unwrap().clone().unwrap();
+                info!("Mining block with target: {}", block.header().target());
+                if block.mine(2_000_000) {
+                    info!("Block mined: {:?}", block.hash());
+                    sender.send(block).expect("Failed to send mined block");
+                    mining.store(false, Ordering::SeqCst);
                 }
-                // Exit if mining flag is false (shutdown)
-                if !mining.load(Ordering::SeqCst) {
-                    break;
-                }
-                thread::yield_now();
             }
+            // Exit if mining flag is false (shutdown)
+            if !mining.load(Ordering::SeqCst) {
+                break;
+            }
+            thread::yield_now();
         }
-
+    }
 
     async fn fetch_and_validate_template(&self) -> Result<()> {
         if !self.mining.load(Ordering::Relaxed) {
@@ -198,9 +195,9 @@ mod tests {
     // Positive test: successful mining sets mining flag to false and sends block
     #[test]
     fn test_successful_mining_sets_flag_and_sends_block() {
+        use flume;
         use std::sync::atomic::Ordering;
         use std::sync::{Arc, Mutex};
-        use flume;
         let mining = Arc::new(AtomicBool::new(true));
         let template = Arc::new(Mutex::new(Some(create_test_block())));
         let (sender, receiver) = flume::unbounded::<Block>();
@@ -214,15 +211,24 @@ mod tests {
         }
         assert!(!mining.load(Ordering::SeqCst));
         let received = receiver.recv().unwrap();
-        assert_eq!(received.header().merkle_root(), template.lock().unwrap().as_ref().unwrap().header().merkle_root());
+        assert_eq!(
+            received.header().merkle_root(),
+            template
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .header()
+                .merkle_root()
+        );
     }
 
     // Negative test: mining with invalid template does not send block
     #[test]
     fn test_mining_with_invalid_template_does_not_send_block() {
+        use flume;
         use std::sync::atomic::Ordering;
         use std::sync::{Arc, Mutex};
-        use flume;
         let mining = Arc::new(AtomicBool::new(true));
         let template = Arc::new(Mutex::new(None::<Block>));
         let (sender, receiver) = flume::unbounded::<Block>();
@@ -241,9 +247,9 @@ mod tests {
     // Negative test: mining with mining flag off does not send block
     #[test]
     fn test_mining_with_flag_off_does_not_send_block() {
+        use flume;
         use std::sync::atomic::Ordering;
         use std::sync::{Arc, Mutex};
-        use flume;
         let mining = Arc::new(AtomicBool::new(false));
         let template = Arc::new(Mutex::new(Some(create_test_block())));
         let (sender, receiver) = flume::unbounded::<Block>();
@@ -267,7 +273,10 @@ mod tests {
         let block = create_test_block();
         sender.send(block.clone()).unwrap();
         let received = receiver.recv().unwrap();
-        assert_eq!(received.header().merkle_root(), block.header().merkle_root());
+        assert_eq!(
+            received.header().merkle_root(),
+            block.header().merkle_root()
+        );
     }
 
     #[test]

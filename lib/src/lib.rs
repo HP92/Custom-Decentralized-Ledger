@@ -24,10 +24,12 @@ pub const MIN_TARGET: U256 = U256([
 pub const DIFFICULTY_UPDATE_INTERVAL: u64 = 2016;
 // maximum mempool transaction age in seconds
 pub const MAX_MEMPOOL_TX_AGE: u64 = 600; // 10 minutes
+// maximum amount of transactions allowed in the block
+pub const BLOCK_TRANSACTION_CAP: usize = 20;
 
 pub mod crypto;
 pub mod custom_sha_types;
-pub mod network;
 pub mod error;
+pub mod network;
 pub mod types;
 pub mod utils;

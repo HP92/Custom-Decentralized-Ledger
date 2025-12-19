@@ -132,7 +132,7 @@ impl Block {
                     .map(|(_, output)| output);
 
                 let prev_output = prev_output.ok_or(BtcError::InvalidTransaction)?;
-                
+
                 inputs.insert(*previous_transaction_output_hash, prev_output.clone());
             }
 

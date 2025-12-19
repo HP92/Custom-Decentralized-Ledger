@@ -9,7 +9,7 @@ use log::error;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    U256,
+    INITIAL_REWARD, U256,
     custom_sha_types::Hash,
     error::{BtcError, Result},
     types::{Block, Transaction, TransactionOutput},
@@ -38,7 +38,7 @@ impl Blockchain {
         self.target
     }
 
-    pub fn blocks(&self) -> &[Block]{
+    pub fn blocks(&self) -> &[Block] {
         &self.blocks
     }
 
@@ -74,7 +74,11 @@ impl Blockchain {
             }
 
             // check if the block's hash is less than the target
-            if !block.header().hash().matches_target(block.header().target()) {
+            if !block
+                .header()
+                .hash()
+                .matches_target(block.header().target())
+            {
                 error!(
                     "Does not match target: {:x?} >= {:x?}",
                     block.header().hash(),
@@ -313,6 +317,12 @@ impl Blockchain {
                 *marked = false;
             });
         }
+    }
+
+    pub fn calculate_block_reward(&self) -> u64 {
+        let block_height = self.block_height();
+        let halvings = block_height / crate::HALVING_INTERVAL;
+        (INITIAL_REWARD * 10u64.pow(8)) >> halvings
     }
 }
 
