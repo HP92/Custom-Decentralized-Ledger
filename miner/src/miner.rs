@@ -38,11 +38,18 @@ impl Miner {
         })
     }
 
-    pub async fn run(&self, shutdown: Arc<AtomicBool>) -> Result<()> {
+    pub async fn run(&self, running: Arc<AtomicBool>) -> Result<()> {
         self.spawn_mining_thread();
+        
         let mut template_interval = interval(Duration::from_secs(5));
+        // Skip the first tick since intervals tick immediately
+        template_interval.tick().await;
+        
+        // Fetch initial template immediately upon connection
+        self.fetch_template().await?;
+        
         loop {
-            if shutdown.load(Ordering::SeqCst) {
+            if !running.load(Ordering::SeqCst) {
                 info!("Miner shutdown signal received. Exiting run loop.");
                 break;
             }
@@ -68,24 +75,31 @@ impl Miner {
         let template = self.current_template.clone();
         let mining = self.mining.clone();
         let sender = self.mined_block_sender.clone();
-        thread::yield_now();
-        thread::sleep(Duration::from_millis(10));
-        loop {
-            if mining.load(Ordering::SeqCst) && template.lock().unwrap().is_some() {
-                let mut block = template.lock().unwrap().clone().unwrap();
-                info!("Mining block with target: {}", block.header().target());
-                if block.mine(2_000_000) {
-                    info!("Block mined: {:?}", block.hash());
-                    sender.send(block).expect("Failed to send mined block");
-                    mining.store(false, Ordering::SeqCst);
-                }
-            }
-            // Exit if mining flag is false (shutdown)
-            if !mining.load(Ordering::SeqCst) {
-                break;
-            }
+        let handle = thread::spawn(move || {
             thread::yield_now();
-        }
+            thread::sleep(Duration::from_millis(10));
+            loop {
+                if mining.load(Ordering::SeqCst) && template.lock().unwrap().is_some() {
+                    let mut block = template.lock().unwrap().clone().unwrap();
+                    info!("Mining block with target: {}", block.header().target());
+                    // Keep mining until we find a valid block or mining is stopped
+                    while mining.load(Ordering::SeqCst) {
+                        if block.mine(10_000_000) {
+                            info!("Block mined: {:?}", block.hash());
+                            sender.send(block).expect("Failed to send mined block");
+                            mining.store(false, Ordering::SeqCst);
+                            break;
+                        }
+                    }
+                }
+                // Exit if mining flag is false (shutdown)
+                if !mining.load(Ordering::SeqCst) {
+                    break;
+                }
+                thread::yield_now();
+            }
+        });
+        *self.mining_thread_handle.lock().unwrap() = Some(handle);
     }
 
     async fn fetch_and_validate_template(&self) -> Result<()> {
@@ -102,11 +116,8 @@ impl Miner {
         let message = Message::FetchTemplate(self.public_key.clone());
         let mut stream_lock = self.stream.lock().await;
         message.send_async(&mut *stream_lock).await?;
-        drop(stream_lock);
-        let mut stream_lock = self.stream.lock().await;
         match Message::receive_async(&mut *stream_lock).await? {
             Message::Template(template) => {
-                drop(stream_lock);
                 info!(
                     "Received new template with target: {}",
                     template.header().target()
