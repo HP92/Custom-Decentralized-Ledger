@@ -12,7 +12,7 @@ impl TransactionInput {
     /// Creates a new TransactionInput after validating the hash and signature.
     /// Returns None if the hash is zero or the signature is invalid.
     pub fn new(prev_transaction_output_hash: Hash, signature: Signature) -> Self {
-        TransactionInput {
+        Self {
             prev_transaction_output_hash,
             signature,
         }

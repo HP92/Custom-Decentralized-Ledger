@@ -40,14 +40,14 @@ impl Miner {
 
     pub async fn run(&self, running: Arc<AtomicBool>) -> Result<()> {
         self.spawn_mining_thread();
-        
+
         let mut template_interval = interval(Duration::from_secs(5));
         // Skip the first tick since intervals tick immediately
         template_interval.tick().await;
-        
+
         // Fetch initial template immediately upon connection
         self.fetch_template().await?;
-        
+
         loop {
             if !running.load(Ordering::SeqCst) {
                 info!("Miner shutdown signal received. Exiting run loop.");

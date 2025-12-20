@@ -16,7 +16,7 @@ pub struct Transaction {
 
 impl Transaction {
     pub fn new(inputs: Vec<TransactionInput>, outputs: Vec<TransactionOutput>) -> Self {
-        Transaction { inputs, outputs }
+        Self { inputs, outputs }
     }
 
     pub fn hash(&self) -> Hash {

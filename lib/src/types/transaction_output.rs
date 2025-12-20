@@ -12,7 +12,7 @@ pub struct TransactionOutput {
 
 impl TransactionOutput {
     pub fn new(value: u64, unique_id: Uuid, pubkey: PublicKey) -> Self {
-        TransactionOutput {
+        Self {
             value,
             unique_id,
             pubkey,

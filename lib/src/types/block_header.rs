@@ -134,12 +134,20 @@ mod tests {
 
     #[test]
     fn test_block_header_nonce_increment() {
+        use crate::U256;
         let timestamp = Utc::now();
         let merkle_root = create_test_merkle_root();
-        let mut header = BlockHeader::new(timestamp, 0, Hash::zero(), merkle_root, MIN_TARGET);
+        // Use a target that requires some mining (not too easy, not impossible)
+        let target = U256([
+            0xFFFF_FFFF_FFFF_FFFF,
+            0xFFFF_FFFF_FFFF_FFFF,
+            0xFFFF_FFFF_FFFF_FFFF,
+            0x0000_0000_0000_00FF,
+        ]);
+        let mut header = BlockHeader::new(timestamp, 0, Hash::zero(), merkle_root, target);
 
         let initial_nonce = header.nonce;
-        header.mine(1);
+        header.mine(100000);
 
         assert_ne!(header.nonce, initial_nonce);
     }

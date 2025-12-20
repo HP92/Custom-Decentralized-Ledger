@@ -14,7 +14,7 @@ pub const HALVING_INTERVAL: u64 = 210_000;
 // ideal block time in seconds (Bitcoin: 10 minutes = 600 seconds)
 pub const IDEAL_BLOCK_TIME: u64 = 600;
 // minimum target (higher value = easier mining, lower value = harder mining)
-// 
+//
 // EASY DIFFICULTY - For demo/testing purposes (blocks mine in seconds):
 pub const MIN_TARGET: U256 = U256([
     0xFFFF_FFFF_FFFF_FFFF,

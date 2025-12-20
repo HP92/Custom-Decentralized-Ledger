@@ -5,46 +5,28 @@ mod tests {
     #[test]
     fn test_cli_default_port() {
         use clap::Parser;
-        let cli = Cli::parse_from(&[
-            "node",
-            "--blockchain-file",
-            "test.cbor",
-        ]);
+        let cli = Cli::parse_from(&["node", "--blockchain-file", "test.cbor"]);
         assert_eq!(cli.port(), 9000);
     }
 
     #[test]
     fn test_cli_custom_port() {
         use clap::Parser;
-        let cli = Cli::parse_from(&[
-            "node",
-            "--blockchain-file",
-            "test.cbor",
-            "--port",
-            "8080",
-        ]);
+        let cli = Cli::parse_from(&["node", "--blockchain-file", "test.cbor", "--port", "8080"]);
         assert_eq!(cli.port(), 8080);
     }
 
     #[test]
     fn test_cli_blockchain_file() {
         use clap::Parser;
-        let cli = Cli::parse_from(&[
-            "node",
-            "--blockchain-file",
-            "my_blockchain.cbor",
-        ]);
+        let cli = Cli::parse_from(&["node", "--blockchain-file", "my_blockchain.cbor"]);
         assert_eq!(cli.blockchain_file(), "my_blockchain.cbor");
     }
 
     #[test]
     fn test_cli_nodes_empty() {
         use clap::Parser;
-        let cli = Cli::parse_from(&[
-            "node",
-            "--blockchain-file",
-            "test.cbor",
-        ]);
+        let cli = Cli::parse_from(&["node", "--blockchain-file", "test.cbor"]);
         assert!(cli.nodes().is_empty());
     }
 
