@@ -42,7 +42,7 @@ async fn test_concurrent_blockchain_reads() {
 
     let result1 = handle1.await.unwrap();
     let result2 = handle2.await.unwrap();
-    
+
     // Both reads should succeed and return the same length
     assert_eq!(result1, result2);
 }

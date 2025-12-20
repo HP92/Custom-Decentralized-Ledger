@@ -1,32 +1,62 @@
 use anyhow::Result;
-use clap::Parser;
+use clap::{Arg, Command};
 use node::{
     BLOCKCHAIN, NODES,
-    util::{cleanup, save},
+    handler::handle_connection,
+    util::{
+        cleanup, download_blockchain, find_longest_chain_node, load_blockchain,
+        populate_connections, save,
+    },
 };
 use std::path::Path;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::Semaphore;
 use tokio::signal;
-
-use node::{
-    handler::handle_connection,
-    util::{
-        Cli, download_blockchain, find_longest_chain_node, load_blockchain, populate_connections,
-    },
-};
+use tokio::sync::Semaphore;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
-    let cli = Cli::parse();
-    log::info!("Port: {}", cli.port());
-    log::info!("Blockchain file: {}", cli.blockchain_file());
-    log::info!("Nodes: {:?}", cli.nodes());
-    let port = cli.port();
-    let blockchain_file = cli.blockchain_file();
-    let nodes = cli.nodes();
+
+    let matches = Command::new("Node")
+        .version("1.0")
+        .author("Charalampos Polychronakis <polychronakis.h@gmail.com>")
+        .about("Blockchain node that manages connections, validates blocks, and maintains the distributed ledger")
+        .arg(
+            Arg::new("port")
+                .short('p')
+                .long("port")
+                .help("Port to listen on")
+                .default_value("8080")
+                .value_parser(clap::value_parser!(u16)),
+        )
+        .arg(
+            Arg::new("blockchain_file")
+                .short('f')
+                .long("blockchain-file")
+                .help("Path to the blockchain file")
+                .default_value("blockchain.cbor"),
+        )
+        .arg(
+            Arg::new("nodes")
+                .short('n')
+                .long("nodes")
+                .help("Initial nodes to connect to")
+                .value_delimiter(',')
+                .num_args(0..),
+        )
+        .get_matches();
+
+    let port = *matches.get_one::<u16>("port").unwrap();
+    let blockchain_file = matches.get_one::<String>("blockchain_file").unwrap();
+    let nodes: Vec<String> = matches
+        .get_many::<String>("nodes")
+        .map(|vals| vals.map(|s| s.to_string()).collect())
+        .unwrap_or_default();
+
+    log::info!("Port: {}", port);
+    log::info!("Blockchain file: {}", blockchain_file);
+    log::info!("Nodes: {:?}", nodes);
 
     // Load or initialize the blockchain
     if Path::new(&blockchain_file).exists() {
@@ -35,7 +65,7 @@ async fn main() -> Result<()> {
     } else {
         log::warn!("Blockchain file does not exist!");
         if !nodes.is_empty() {
-            populate_connections(nodes).await?;
+            populate_connections(&nodes).await?;
             log::info!("Total amount of known nodes: {}", NODES.len());
             let (longest_name, longest_count): (String, _) = find_longest_chain_node().await?;
             // request the blockchain from the node with the longest blockchain
@@ -53,7 +83,9 @@ async fn main() -> Result<()> {
                     blockchain.try_adjust_target();
                 }
             } else {
-                log::info!("Connected nodes have empty blockchains, starting with empty blockchain");
+                log::info!(
+                    "Connected nodes have empty blockchains, starting with empty blockchain"
+                );
             }
         } else {
             log::info!("No initial nodes provided, starting as a seed node with empty blockchain");
@@ -64,17 +96,20 @@ async fn main() -> Result<()> {
     let addr = format!("0.0.0.0:{}", port);
     let listener = TcpListener::bind(&addr).await?;
     log::info!("Node listening on {}", addr);
-    
+
     // Spawn periodic tasks ONCE (not per connection)
     tokio::spawn(cleanup());
     tokio::spawn(save(blockchain_file.to_string()));
-    
+
     // Connection limiting to prevent DoS
     const MAX_CONNECTIONS: usize = 100;
     let connection_limit = Arc::new(Semaphore::new(MAX_CONNECTIONS));
-    
-    log::info!("Node ready to accept connections (max: {})", MAX_CONNECTIONS);
-    
+
+    log::info!(
+        "Node ready to accept connections (max: {})",
+        MAX_CONNECTIONS
+    );
+
     loop {
         // Wait for either a new connection or shutdown signal
         tokio::select! {
@@ -88,7 +123,7 @@ async fn main() -> Result<()> {
                 match result {
                     Ok((socket, addr)) => {
                         log::info!("New connection from: {}", addr);
-                        
+
                         // Acquire connection permit
                         let permit = match connection_limit.clone().try_acquire_owned() {
                             Ok(permit) => permit,
@@ -97,7 +132,7 @@ async fn main() -> Result<()> {
                                 continue;
                             }
                         };
-                        
+
                         tokio::spawn(async move {
                             let _permit = permit; // Hold permit until task completes
                             handle_connection(socket).await;
@@ -111,7 +146,7 @@ async fn main() -> Result<()> {
             }
         }
     }
-    
+
     log::info!("Node shutdown complete");
     Ok(())
 }

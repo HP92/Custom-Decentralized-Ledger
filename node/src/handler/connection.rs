@@ -207,7 +207,7 @@ pub async fn handle_connection(mut socket: TcpStream) {
                 ) {
                     Ok(fees) => fees,
                     Err(e) => {
-                        eprintln!("{e}");
+                        log::error!("Failed to calculate miner fees: {e}");
                         return;
                     }
                 };
