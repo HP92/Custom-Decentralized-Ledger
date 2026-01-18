@@ -87,7 +87,24 @@ cargo build -p wallet
 
 Run the node:
 ```bash
-cargo run -p node
+# Start a seed node (first node in the network)
+cargo run --bin main -- --blockchain-file blockchain.cbor --port 9000
+
+# Start a node connecting to existing nodes
+cargo run --bin main -- --blockchain-file blockchain.cbor --port 9001 --nodes localhost:9000
+
+# With logging enabled (PowerShell)
+$env:RUST_LOG="info"; cargo run --bin main -- --blockchain-file blockchain.cbor --port 9000
+
+# With logging enabled (Bash/Linux)
+RUST_LOG=info cargo run --bin main -- --blockchain-file blockchain.cbor --port 9000
+```
+
+Run the offline miner:
+```bash
+cargo run -p miner -- <block_file> <steps>
+# Example:
+cargo run -p miner -- my_block.cbor 1000
 ```
 
 Run the offline miner:
@@ -143,7 +160,14 @@ RUST_LOG=info cargo run -p miner -- my_block.cbor 1000
 
 ## Development Status
 
-This project is currently in early development. The basic workspace structure has been established with placeholder implementations for each component.
+This project is currently in active development. The node component is functional with:
+- ✅ P2P network communication
+- ✅ Blockchain synchronization
+- ✅ Transaction handling
+- ✅ Block validation
+- ✅ Comprehensive test coverage
+- ✅ Multi-node network support
+- ✅ Online mining with network coordination
 
 ## Learning Goals
 
