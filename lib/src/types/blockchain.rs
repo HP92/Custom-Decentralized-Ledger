@@ -83,7 +83,7 @@ impl Blockchain {
                 return Err(crate::error::BtcError::InvalidBlock);
             }
 
-            let calculated_merkle_root = MerkleRoot::calculate(&block.transactions());
+            let calculated_merkle_root = MerkleRoot::calculate(block.transactions());
             if *block.header().merkle_root() != calculated_merkle_root {
                 error!(
                     "Invalid Merkle root: {:x?} != {:x?}",

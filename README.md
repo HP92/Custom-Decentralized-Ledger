@@ -90,14 +90,55 @@ Run the node:
 cargo run -p node
 ```
 
-Run the miner:
+Run the offline miner:
 ```bash
-cargo run -p miner
+cargo run -p miner -- <block_file> <steps>
+# Example:
+cargo run -p miner -- my_block.cbor 1000
+```
+
+Run the online miner:
+```bash
+cargo run --bin online_miner -- <address> <public_key_file>
+# Example:
+cargo run --bin online_miner -- localhost:9000 alice.pub.pem
 ```
 
 Run the wallet:
 ```bash
 cargo run -p wallet
+```
+
+### Library Utilities
+
+The core library provides several utilities for testing and debugging:
+
+```bash
+# Generate a transaction
+cargo run --bin tx_gen output.cbor
+
+# Print transaction details
+cargo run --bin tx_print tx.cbor
+
+# Generate a block
+cargo run --bin block_gen block.cbor
+
+# Print block details
+cargo run --bin block_print my_block.cbor
+
+# Generate key pair
+cargo run --bin key_gen mykey
+# Creates: mykey.pub.pem and mykey.priv.cbor
+```
+
+For detailed logging output, set the `RUST_LOG` environment variable:
+
+```bash
+# PowerShell
+$env:RUST_LOG="info"; cargo run -p miner -- my_block.cbor 1000
+
+# Bash/Linux
+RUST_LOG=info cargo run -p miner -- my_block.cbor 1000
 ```
 
 ## Development Status

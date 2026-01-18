@@ -2,9 +2,11 @@ use ecdsa::SigningKey;
 use k256::Secp256k1;
 use serde::{Deserialize, Serialize};
 
+use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write};
+
 use rand_core::OsRng; // Use rand_core's OsRng for compatibility
 
-use crate::crypto::PublicKey;
+use crate::{crypto::PublicKey, utils::Saveable};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PrivateKey(#[serde(with = "signkey_serde")] SigningKey<Secp256k1>);
@@ -27,6 +29,19 @@ impl PrivateKey {
 impl Default for PrivateKey {
     fn default() -> Self {
         PrivateKey(SigningKey::random(&mut OsRng))
+    }
+}
+
+impl Saveable for PrivateKey {
+    fn load<I: Read>(reader: I) -> IoResult<Self> {
+        ciborium::de::from_reader(reader)
+            .map_err(|_| IoError::new(IoErrorKind::InvalidData, "Failed to deserialize PrivateKey"))
+    }
+    fn save<O: Write>(&self, writer: O) -> IoResult<()> {
+        ciborium::ser::into_writer(self, writer).map_err(|_| {
+            IoError::new(IoErrorKind::InvalidData, "Failed to serialize PrivateKey")
+        })?;
+        Ok(())
     }
 }
 

@@ -13,7 +13,7 @@ impl MerkleRoot {
         }
 
         while layer.len() > 1 {
-            let mut next_layer: Vec<Hash> = Vec::with_capacity((layer.len() + 1) / 2);
+            let mut next_layer: Vec<Hash> = Vec::with_capacity(layer.len().div_ceil(2));
             for pair in layer.chunks(2) {
                 let left = pair[0];
                 let right = pair.get(1).unwrap_or(&pair[0]);
