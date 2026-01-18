@@ -91,7 +91,6 @@ impl Message {
         let len = bytes.len() as u64;
         stream.write_all(&len.to_be_bytes()).await?;
         stream.write_all(&bytes).await?;
-        stream.flush().await?;
         Ok(())
     }
 
